@@ -1,0 +1,103 @@
+name: Export Aestific Frontend
+
+on:
+  push:
+    branches:
+      - frontend-export-temp
+    paths:
+      - .github/workflows/export-frontend.yml
+
+permissions:
+  contents: read
+
+jobs:
+  export-frontend:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Assemble frontend-only project
+        shell: bash
+        run: |
+          set -euo pipefail
+          OUT="$RUNNER_TEMP/aestific-frontend"
+          mkdir -p "$OUT"
+          git archive HEAD src public index.html metadata.json vite.config.ts tsconfig.json | tar -x -C "$OUT"
+
+          node - "$OUT" <<'NODE'
+          const fs = require('fs');
+          const path = require('path');
+          const out = process.argv[2];
+          const original = JSON.parse(fs.readFileSync('package.json', 'utf8'));
+          const clean = {
+            name: 'aestific-frontend',
+            private: true,
+            version: original.version || '1.0.0',
+            type: 'module',
+            scripts: {
+              dev: 'vite --host 0.0.0.0',
+              build: 'vite build',
+              preview: 'vite preview --host 0.0.0.0'
+            },
+            dependencies: original.dependencies || {},
+            devDependencies: original.devDependencies || {}
+          };
+          fs.writeFileSync(path.join(out, 'package.json'), JSON.stringify(clean, null, 2) + '\n');
+          NODE
+
+          cat > "$OUT/README.md" <<'EOF'
+          # Aestific AI — Frontend-only project
+
+          This package contains the original React/Vite frontend source and public assets extracted from Aestific AI.
+
+          ## Run locally
+          1. Install Node.js 20 or newer.
+          2. Run `npm install`.
+          3. Run `npm run dev`.
+          4. Open the local Vite URL shown in the terminal.
+
+          ## Build
+          Run `npm run build`. The production frontend is generated in `dist/`.
+
+          ## Important backend boundary
+          This ZIP intentionally excludes the Express/Cloudflare backend, server code, database, migrations, deployment configuration, and credentials. The UI still calls same-origin `/api/...` endpoints for authentication, chat, history, files, and other live services. Those features need the existing Aestific backend (or compatible API implementation) to work fully. Without it, the visual frontend can run, but backend-powered actions will not complete.
+
+          Keep the backend API on the same origin or configure a development proxy in Vite before connecting a separate backend. Never place provider API keys or server credentials in browser code or VITE_ variables.
+
+          ## Included
+          - `src/`: original React app, components, styles, and frontend utilities
+          - `public/`: public static assets
+          - Vite, TypeScript, HTML entry, metadata, and a frontend-only package manifest
+
+          ## Excluded
+          - `server.ts`, `server/`, database schemas and migrations
+          - `wrangler.jsonc`, server scripts, runtime data, and AI Studio artifacts
+          - `.env` files, tokens, API keys, and service credentials
+          EOF
+
+          cat > "$OUT/.gitignore" <<'EOF'
+          node_modules/
+          dist/
+          .env
+          .env.*
+          !.env.example
+          EOF
+
+          # Scan only the exact export payload. Gitleaks redacts findings; any finding blocks upload.
+          docker run --rm -v "$OUT:/repo:ro" zricethezav/gitleaks:v8.24.2 detect \
+            --source=/repo --no-git --redact --exit-code 1 --no-banner
+
+          cd "$OUT"
+          zip -qr "$RUNNER_TEMP/aestific-frontend.zip" .
+
+      - name: Upload frontend ZIP
+        uses: actions/upload-artifact@v4
+        with:
+          name: aestific-frontend
+          path: ${{ runner.temp }}/aestific-frontend.zip
+          if-no-files-found: error
+          retention-days: 3
