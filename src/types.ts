@@ -197,7 +197,7 @@ export interface AIModelOption {
   context: string;
 }
 
-export type ActiveView = 'chat' | 'files' | 'memories' | 'settings' | 'terms' | 'documents' | 'secret_verify' | 'support' | 'landing' | 'whatsNew' | 'privacy';
+export type ActiveView = 'chat' | 'files' | 'memories' | 'settings' | 'terms' | 'documents' | 'secret_verify' | 'support' | 'landing' | 'whatsNew' | 'privacy' | 'about' | 'founder' | 'signup';
 
 export interface SupportTicket {
   id: string;

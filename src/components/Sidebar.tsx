@@ -256,7 +256,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         {/* 1. Brand Logo Header */}
         <div className="pt-4 pb-3 px-4 flex items-center justify-between shrink-0">
           <div
-            className="cursor-pointer flex items-center"
+            className="cursor-pointer flex items-center gap-2"
             onClick={() => {
               onSelectView('chat');
               onNewChat();

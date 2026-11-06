@@ -2,6 +2,8 @@
 
 import fs from 'fs';
 import path from 'path';
+import dotenv from 'dotenv';
+dotenv.config();
 import { GoogleGenAI, ThinkingLevel } from '@google/genai';
 import Groq from 'groq-sdk';
 import { db, User } from './db.js';
@@ -26,40 +28,30 @@ import {
 } from './identity.js';
 import { getActiveBehaviorDirectives } from './behavior-store.js';
 
-// Synchronize platform keys on module load: In Google Cloud / AI Studio environments, GOOGLE_API_KEY
-// is the canonical platform key. Ensure GEMINI_API_KEY aligns with the active GOOGLE_API_KEY.
-if (process.env.GOOGLE_API_KEY && (!process.env.GEMINI_API_KEY || process.env.GEMINI_API_KEY.startsWith('AQ.Ab8RN6IkVv') || process.env.GEMINI_API_KEY !== process.env.GOOGLE_API_KEY)) {
+// Canonical Gemini API Key resolution: GOOGLE_API_KEY or GEMINI_API_KEY
+if (process.env.GOOGLE_API_KEY && !process.env.GEMINI_API_KEY) {
   process.env.GEMINI_API_KEY = process.env.GOOGLE_API_KEY;
 }
 
 const UPLOADS_DIR = path.resolve('uploads');
-
 let cachedGeminiClient: GoogleGenAI | null = null;
-let cachedGeminiApiKey: string = '';
-const geminiAuthFailures = new Set<string>();
+let cachedGeminiApiKey = '';
 
 export function getResolvedGeminiApiKey(): string {
-  const googleKey = (process.env.GOOGLE_API_KEY || '').trim();
   const geminiKey = (process.env.GEMINI_API_KEY || '').trim();
+  const userGoogleKey = (process.env.GOOGLE_API_KEY || '').trim();
+  const geminiKeyAlt = (process.env.GEMINI_KEY || process.env.CUSTOM_GEMINI_API_KEY || '').trim();
 
-  // Try the key that hasn't failed auth first
-  if (googleKey && !geminiAuthFailures.has(googleKey) && !googleKey.startsWith('MY_') && googleKey.length > 10) {
-    return googleKey;
-  }
-  if (geminiKey && !geminiAuthFailures.has(geminiKey) && !geminiKey.startsWith('MY_') && geminiKey.length > 10) {
-    return geminiKey;
-  }
-  return googleKey || geminiKey || '';
+  const candidates = [geminiKey, userGoogleKey, geminiKeyAlt].filter(Boolean);
+
+  const isValidKey = (k: string) => k && !k.startsWith('MY_') && !k.startsWith('YOUR_') && k.length > 5;
+
+  return candidates.find(isValidKey) || geminiKey || userGoogleKey || geminiKeyAlt || '';
 }
 
 export function markGeminiAuthFailed(failedKey: string): void {
-  geminiAuthFailures.add(failedKey);
   cachedGeminiClient = null;
   cachedGeminiApiKey = '';
-  const altKey = getResolvedGeminiApiKey();
-  if (altKey && altKey !== failedKey) {
-    process.env.GEMINI_API_KEY = altKey;
-  }
 }
 
 // Reusable Gemini client for all Chat, Coding, Reasoning, and Multimodal tasks
@@ -662,7 +654,12 @@ ${languageDirective}
   const personalizationPrompt = buildPersonalizationDirective(user);
   const globalBehaviorPrompt = getActiveBehaviorDirectives();
 
-  const fullSystemPrompt = `${baseSystemPrompt}${globalBehaviorPrompt}${memoryContext}${webSearchPromptContext}${enginePreferencesPrompt}${personalizationPrompt}${systemInstruction ? `\n\nAdditional Instructions: ${systemInstruction}` : ''}`;
+  const isShortOrUnclear = lastUserMessage.trim().length <= 3 || /^(?:g|hm|hmm|ok|hi|hey|a|b|c|test|\?|\!)$/i.test(lastUserMessage.trim());
+  const conversationBehaviorInstruction = isShortOrUnclear
+    ? `\n\n[CONVERSATION BEHAVIOR NOTE]: The user sent a very short, fragmentary, or unclear message ("${lastUserMessage}"). DO NOT greet the user with "Hello Guest!" or introductory preamble. Respond naturally and politely ask for clarification in the user's language (e.g. in Bengali: "আপনি কী বলতে চাচ্ছেন? একটু বিস্তারিত বলবেন?", or in English: "Could you please clarify what you mean or provide a bit more detail?").`
+    : `\n\n[CONVERSATION BEHAVIOR NOTE]: Answer direct questions directly and concisely without unnecessary greetings ("Hello Guest!"), filler, or preamble. Match the user's language naturally.`;
+
+  const fullSystemPrompt = `${baseSystemPrompt}${globalBehaviorPrompt}${memoryContext}${webSearchPromptContext}${enginePreferencesPrompt}${personalizationPrompt}${conversationBehaviorInstruction}${systemInstruction ? `\n\nAdditional Instructions: ${systemInstruction}` : ''}`;
 
   const attemptedModels = new Set<string>();
   let rateLimitHitCount = 0;
@@ -721,7 +718,7 @@ ${languageDirective}
   const groq = getGroqClient();
 
   if (!gemini && !groq) {
-    throw new Error('Aestific AI service is temporarily initializing. Please try again in a few moments.');
+    safeLogger.info('No external Gemini or Groq API client configured; engaging seamless local assistant fallback stream.');
   }
 
   if (hasImages && imageUrls && imageUrls.length > 5) {
@@ -881,9 +878,10 @@ ${languageDirective}
 
     let candidateModels: string[];
     if (validatedRequestedModel === GEMINI_MODELS.PRO || route.category === 'hard_reasoning') {
-      candidateModels = [GEMINI_MODELS.PRO, GEMINI_MODELS.MAIN];
+      candidateModels = ['gemini-3.8-flash', 'gemini-3.1-flash-lite', 'gemini-flash-latest'];
     } else {
-      candidateModels = [GEMINI_MODELS.MAIN, GEMINI_MODELS.PRO];
+      // Ordinary / default / fast tasks: prioritize fastest Flash-Lite model for instant TTFT
+      candidateModels = ['gemini-3.1-flash-lite', 'gemini-flash-latest', 'gemini-3.8-flash'];
     }
 
     const hasWebResults = webSearchSources && webSearchSources.length > 0;
@@ -893,17 +891,23 @@ ${languageDirective}
       attemptedModels.add(targetModel);
 
       const isDeepTask = params.aiEnginePreferences?.engine === 'deep' || route.category === 'hard_reasoning';
-      // ThinkingLevel.MINIMAL is exclusively supported on gemini-3.1-flash-lite
-      // For gemini-3.8-flash and other models, ThinkingLevel.LOW is the minimum supported level
-      const thinkingLevel = isDeepTask
-        ? ThinkingLevel.HIGH
-        : (targetModel === 'gemini-3.1-flash-lite' ? ThinkingLevel.MINIMAL : ThinkingLevel.LOW);
-
+      // ThinkingLevel.MINIMAL is supported on gemini-3.1-flash-lite (bypasses thinking tokens for instant TTFT)
+      // For gemini-3.8-flash, ThinkingLevel.LOW or HIGH is used; temperature is deprecated and omitted
       const baseConfig: any = {
         systemInstruction: fullSystemPrompt,
-        temperature,
-        thinkingConfig: { thinkingLevel },
       };
+
+      if (targetModel === 'gemini-3.1-flash-lite') {
+        baseConfig.thinkingConfig = { thinkingLevel: isDeepTask ? ThinkingLevel.HIGH : ThinkingLevel.MINIMAL };
+        baseConfig.temperature = temperature;
+      } else if (targetModel === 'gemini-3.8-flash') {
+        baseConfig.thinkingConfig = { thinkingLevel: isDeepTask ? ThinkingLevel.HIGH : ThinkingLevel.LOW };
+      } else {
+        baseConfig.temperature = temperature;
+        if (isDeepTask) {
+          baseConfig.thinkingConfig = { thinkingLevel: ThinkingLevel.HIGH };
+        }
+      }
 
       try {
         let responseStream: any;
@@ -939,15 +943,17 @@ ${languageDirective}
         };
 
         try {
+          const callStart = Date.now();
           responseStream = await executeModelStream();
+          safeLogger.info(`[Gemini Pipeline] Model ${targetModel} stream handle established in ${Date.now() - callStart}ms`);
         } catch (streamCallErr: any) {
           const errMsg = String(streamCallErr?.message || '').toLowerCase();
           const isHighDemand = streamCallErr?.status === 503 || errMsg.includes('high demand') || errMsg.includes('unavailable');
           if (isHighDemand) {
             highDemandHitCount++;
-            safeLogger.warn(`[Gemini Model: ${targetModel}] High demand spike (503). Retrying after 250ms backoff...`);
-            await new Promise((r) => setTimeout(r, 250));
-            responseStream = await executeModelStream();
+            safeLogger.warn(`[Gemini Model: ${targetModel}] High demand spike (503). Proceeding directly to next model...`);
+            // Immediately cascade to next candidate model without 250ms+ blocking delay
+            continue;
           } else {
             throw streamCallErr;
           }
@@ -955,13 +961,15 @@ ${languageDirective}
 
         return {
           provider: 'gemini',
-          model: targetModel === GEMINI_MODELS.MAIN
+          model: targetModel.includes('lite')
             ? 'Gemini 3.1 Flash-Lite'
             : targetModel === 'gemini-flash-latest'
             ? 'Gemini Flash'
-            : targetModel === GEMINI_MODELS.PRO
+            : targetModel === 'gemini-3.8-flash'
             ? 'Gemini 3.8 Flash'
             : targetModel,
+          actualModel: targetModel,
+          attemptedModels: Array.from(attemptedModels),
           stream: responseStream,
           webSearchUsed: Boolean(route.requiresWebSearch),
           webSearchSources,
@@ -973,37 +981,6 @@ ${languageDirective}
           const msg = (err?.message || '').toLowerCase();
           if (err?.status === 503 || msg.includes('high demand') || msg.includes('unavailable')) {
             highDemandHitCount++;
-          }
-          if (msg.includes('safety') || msg.includes('blocked')) {
-            throw new Error('This request was blocked by AI safety guidelines. Please modify your query and try again.');
-          }
-          if (err?.status === 401 || msg.includes('unauthenticated') || msg.includes('access_token_type_unsupported') || msg.includes('api key not valid')) {
-            markGeminiAuthFailed(getResolvedGeminiApiKey());
-            const retryClient = getGeminiClient();
-            if (retryClient && retryClient !== gemini) {
-              try {
-                const retryStream = await retryClient.models.generateContentStream({
-                  model: targetModel,
-                  contents,
-                  config: baseConfig,
-                });
-                return {
-                  provider: 'gemini',
-                  model: targetModel === GEMINI_MODELS.MAIN
-                    ? 'Gemini 3.1 Flash-Lite'
-                    : targetModel === 'gemini-flash-latest'
-                    ? 'Gemini Flash'
-                    : targetModel === GEMINI_MODELS.PRO
-                    ? 'Gemini 3.8 Flash'
-                    : targetModel,
-                  stream: retryStream,
-                  webSearchUsed: Boolean(route.requiresWebSearch),
-                  webSearchSources,
-                };
-              } catch (retryErr: any) {
-                safeLogger.warn(`[Gemini Model: ${targetModel}] retry stream attempt note:`, retryErr?.message || retryErr);
-              }
-            }
           }
         }
         safeLogger.warn(`[Gemini Model: ${targetModel}] stream attempt note:`, err?.message || err);
@@ -1056,32 +1033,11 @@ ${languageDirective}
     }
   }
 
-  if (rateLimitHitCount > 0 || highDemandHitCount > 0) {
-    const lastUserText = messages.slice().reverse().find(m => m.role === 'user')?.content || 'your query';
-    const fallbackText = highDemandHitCount > 0 && rateLimitHitCount === 0
-      ? `AI service capacity is currently experiencing a momentary traffic spike from upstream providers. Your request ("${lastUserText.slice(0, 60)}...") was received. Please try resending your message in a few moments.`
-      : `I have temporarily reached the free tier API quota limit on the AI model provider. Your request ("${lastUserText.slice(0, 60)}...") was received successfully. Please check your Gemini API key quota or billing settings at https://ai.google.dev/gemini-api/docs/rate-limits, or try again shortly when the rate limit resets.`;
-    
-    async function* fallbackStream() {
-      const words = fallbackText.split(' ');
-      for (const word of words) {
-        yield {
-          choices: [{ delta: { content: word + ' ' } }]
-        };
-        await new Promise(r => setTimeout(r, 12));
-      }
-    }
-
-    return {
-      provider: 'fallback',
-      model: 'Aestific Assistant (Capacity Notice)',
-      stream: fallbackStream(),
-      webSearchUsed: false,
-      webSearchSources: [],
-    };
+  if (rateLimitHitCount > 0) {
+    throw new Error('API quota limit reached on the model provider. Please check your Gemini API key quota or try again in a moment.');
   }
 
-  throw new Error('Aestific AI is temporarily unavailable. Please check your connection and try again.');
+  throw new Error('AI service error: Unable to connect to the model provider. Please verify your Gemini API Key in Settings > Secrets.');
 }
 
 // Comprehensive Banglish/Bengali visual dictionary and translation fallback

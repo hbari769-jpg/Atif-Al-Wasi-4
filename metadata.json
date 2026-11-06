@@ -1,6 +1,6 @@
 {
   "name": "Aestific AI",
-  "description": "inventing what’s next. Next-generation minimal AI assistant platform powered by ultra-fast neural intelligence, account-level memory, full multimodal file comprehension, AI image generation, and voice interaction.",
+  "description": "Discover Aestific AI, an intelligent platform for AI chat, reasoning, coding, web research, image generation, and more.",
   "requestFramePermissions": ["microphone"],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

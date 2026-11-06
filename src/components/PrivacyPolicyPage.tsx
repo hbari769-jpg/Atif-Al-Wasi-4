@@ -1,12 +1,27 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { ArrowLeft, Shield, Sparkles, Lock, CheckCircle2 } from 'lucide-react';
 import { AestificArchIcon } from './AestificLogo';
+import { updatePageSEO } from '../lib/seo';
 
 interface PrivacyPolicyPageProps {
   onBack: () => void;
+  onNavigate?: (path: string) => void;
 }
 
-export const PrivacyPolicyPage: React.FC<PrivacyPolicyPageProps> = ({ onBack }) => {
+export const PrivacyPolicyPage: React.FC<PrivacyPolicyPageProps> = ({ onBack, onNavigate }) => {
+  useEffect(() => {
+    updatePageSEO('privacy');
+  }, []);
+
+  const handleLinkClick = (e: React.MouseEvent<HTMLAnchorElement>, path: string) => {
+    e.preventDefault();
+    if (onNavigate) {
+      onNavigate(path);
+    } else {
+      window.history.pushState({}, '', path);
+      window.dispatchEvent(new PopStateEvent('popstate'));
+    }
+  };
   return (
     <div className="fixed inset-0 z-50 flex flex-col w-screen h-screen bg-white dark:bg-black text-zinc-900 dark:text-zinc-100 overflow-hidden font-sans">
       {/* Top Header Bar */}
@@ -306,6 +321,48 @@ export const PrivacyPolicyPage: React.FC<PrivacyPolicyPageProps> = ({ onBack }) 
                 This Privacy Policy is structured to reflect Aestific AI&apos;s actual technical implementation (auth, DB, guest mode, AI providers, and session tokens). It is provided for review and refinement before formal legal publication.
               </p>
             </div>
+
+            {/* Internal Navigation Footer */}
+            <footer className="mt-12 pt-6 border-t border-zinc-200 dark:border-white/10 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-zinc-500">
+              <div className="flex flex-wrap items-center gap-4">
+                <a
+                  href="/"
+                  onClick={(e) => handleLinkClick(e, '/')}
+                  className="hover:text-zinc-900 dark:hover:text-white transition-colors underline-offset-4 hover:underline"
+                >
+                  Aestific AI Home
+                </a>
+                <a
+                  href="/about"
+                  onClick={(e) => handleLinkClick(e, '/about')}
+                  className="hover:text-zinc-900 dark:hover:text-white transition-colors underline-offset-4 hover:underline"
+                >
+                  About Aestific
+                </a>
+                <a
+                  href="/founder"
+                  onClick={(e) => handleLinkClick(e, '/founder')}
+                  className="hover:text-zinc-900 dark:hover:text-white transition-colors underline-offset-4 hover:underline"
+                >
+                  Meet the Founder
+                </a>
+                <a
+                  href="/signup"
+                  onClick={(e) => handleLinkClick(e, '/signup')}
+                  className="hover:text-zinc-900 dark:hover:text-white transition-colors underline-offset-4 hover:underline"
+                >
+                  Sign Up
+                </a>
+                <a
+                  href="/terms"
+                  onClick={(e) => handleLinkClick(e, '/terms')}
+                  className="hover:text-zinc-900 dark:hover:text-white transition-colors underline-offset-4 hover:underline"
+                >
+                  Terms of Service
+                </a>
+              </div>
+              <p>© {new Date().getFullYear()} Aestific. All rights reserved.</p>
+            </footer>
 
           </article>
         </div>

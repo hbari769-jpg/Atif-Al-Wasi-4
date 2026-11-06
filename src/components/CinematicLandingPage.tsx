@@ -315,7 +315,7 @@ export const CinematicLandingPage: React.FC<CinematicLandingPageProps> = ({
         >
 
           {/* =================================================================== */}
-          {/* THE ONLY PERSISTENT UI ELEMENT: "open chat" (ALL LOWERCASE)         */}
+          {/* THE ONLY PERSISTENT UI ELEMENT: "open demo" (ALL LOWERCASE)         */}
           {/* =================================================================== */}
           <div className="absolute top-5 right-5 sm:top-6 sm:right-8 z-50 pointer-events-auto">
             <button
@@ -325,9 +325,9 @@ export const CinematicLandingPage: React.FC<CinematicLandingPageProps> = ({
                   ? 'bg-white/10 hover:bg-white/20 text-white border border-white/20 backdrop-blur-md'
                   : 'bg-zinc-100 hover:bg-zinc-200 text-zinc-900 border border-zinc-200/80'
               }`}
-              title="open chat"
+              title="open demo"
             >
-              <span>open chat</span>
+              <span>open demo</span>
               <ArrowRight className="w-3.5 h-3.5 transition-transform group-hover:translate-x-0.5" />
             </button>
           </div>

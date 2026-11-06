@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { AestificLogo, AestificArchIcon, AestificWordmark } from './AestificLogo';
 import { SpatialAtmosphere } from './SpatialAtmosphere';
 import {
@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import { motion } from 'motion/react';
 import { setAuthToken, safeParseJson } from '../lib/api';
+import { updatePageSEO } from '../lib/seo';
 
 interface AuthModalProps {
   initialMode?: 'login' | 'register';
@@ -55,6 +56,9 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   const [error, setError] = useState<string | null>(null);
   const [successInfo, setSuccessInfo] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [oauthLoading, setOauthLoading] = useState(false);
+  const popupRef = useRef<Window | null>(null);
+  const pollTimerRef = useRef<any>(null);
 
   useEffect(() => {
     if (initialMode && (initialMode === 'login' || initialMode === 'register')) {
@@ -63,6 +67,12 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       setSuccessInfo(null);
     }
   }, [initialMode]);
+
+  useEffect(() => {
+    if (mode === 'register') {
+      updatePageSEO('signup');
+    }
+  }, [mode]);
 
   // Resend cooldown timer in seconds
   const [resendCooldown, setResendCooldown] = useState(0);
@@ -92,13 +102,50 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
   useEffect(() => {
     const handleMessage = (event: MessageEvent) => {
+      const origin = event.origin;
+      const isAllowedOrigin =
+        !origin ||
+        origin === window.location.origin ||
+        origin === 'https://aestific.com' ||
+        origin === 'https://www.aestific.com' ||
+        origin.endsWith('.run.app') ||
+        origin.includes('localhost') ||
+        origin.includes('127.0.0.1');
+
+      if (!isAllowedOrigin) return;
+
       if (event.data?.type === 'OAUTH_AUTH_SUCCESS') {
+        if (pollTimerRef.current) {
+          clearInterval(pollTimerRef.current);
+          pollTimerRef.current = null;
+        }
+        setOauthLoading(false);
+        if (popupRef.current && !popupRef.current.closed) {
+          try {
+            popupRef.current.close();
+          } catch {}
+        }
+        try {
+          window.focus();
+        } catch {}
         if (onClose) onClose();
-        window.location.reload();
+      } else if (event.data?.type === 'OAUTH_AUTH_ERROR') {
+        if (pollTimerRef.current) {
+          clearInterval(pollTimerRef.current);
+          pollTimerRef.current = null;
+        }
+        setOauthLoading(false);
+        setError(event.data?.error || 'Google sign-in was canceled or failed.');
       }
     };
     window.addEventListener('message', handleMessage);
-    return () => window.removeEventListener('message', handleMessage);
+    return () => {
+      window.removeEventListener('message', handleMessage);
+      if (pollTimerRef.current) {
+        clearInterval(pollTimerRef.current);
+        pollTimerRef.current = null;
+      }
+    };
   }, [onClose]);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -325,6 +372,54 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     return `${m}:${s < 10 ? '0' : ''}${s}`;
   };
 
+  const handleGoogleAuth = () => {
+    setError(null);
+    setSuccessInfo(null);
+    setOauthLoading(true);
+
+    const width = 500;
+    const height = 640;
+    const left = Math.max(0, Math.round(window.screenX + (window.outerWidth - width) / 2));
+    const top = Math.max(0, Math.round(window.screenY + (window.outerHeight - height) / 2.5));
+    const features = `width=${width},height=${height},left=${left},top=${top},status=no,menubar=no,toolbar=no,location=no,resizable=yes,scrollbars=yes`;
+
+    const targetUrl = `/api/auth/google?origin=${encodeURIComponent(window.location.origin)}`;
+    const popup = window.open(targetUrl, 'aestific_google_oauth_popup', features);
+
+    if (!popup || popup.closed || typeof popup.closed === 'undefined') {
+      setOauthLoading(false);
+      setError('Pop-up was blocked by your browser. Please allow pop-ups for this site to continue with Google.');
+      return;
+    }
+
+    popupRef.current = popup;
+    try {
+      popup.focus();
+    } catch {}
+
+    if (pollTimerRef.current) {
+      clearInterval(pollTimerRef.current);
+    }
+
+    pollTimerRef.current = setInterval(() => {
+      try {
+        if (!popup || popup.closed) {
+          if (pollTimerRef.current) {
+            clearInterval(pollTimerRef.current);
+            pollTimerRef.current = null;
+          }
+          setOauthLoading(false);
+        }
+      } catch {
+        if (pollTimerRef.current) {
+          clearInterval(pollTimerRef.current);
+          pollTimerRef.current = null;
+        }
+        setOauthLoading(false);
+      }
+    }, 1000);
+  };
+
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-6 bg-black/95 backdrop-blur-md overflow-y-auto select-none">
       {/* Dynamic Animated Cosmic Atmosphere */}
@@ -360,7 +455,19 @@ export const AuthModal: React.FC<AuthModalProps> = ({
             <AestificWordmark height={20} />
           </div>
 
-          <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-2 max-w-xs leading-relaxed">
+          <h1 className="text-sm sm:text-base font-semibold tracking-tight text-zinc-900 dark:text-white mt-2">
+            {mode === 'register'
+              ? 'Create your Aestific AI account'
+              : mode === 'login'
+              ? 'Sign in to Aestific AI'
+              : mode === 'verify'
+              ? 'Verify Your Email'
+              : mode === 'forgot'
+              ? 'Reset Account Password'
+              : 'Choose New Password'}
+          </h1>
+
+          <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-1 max-w-xs leading-relaxed">
             {mode === 'login'
               ? 'Sign in to access your intelligence workspace.'
               : mode === 'register'
@@ -788,33 +895,38 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
               <button
                 type="button"
-                onClick={() => {
-                  const authWindow = window.open('/api/auth/google', 'google_oauth_popup', 'width=600,height=700');
-                  if (!authWindow) {
-                    window.location.href = '/api/auth/google';
-                  }
-                }}
-                className="w-full h-11 rounded-xl bg-white dark:bg-zinc-900 border border-zinc-300 dark:border-white/15 text-zinc-800 dark:text-zinc-200 hover:bg-zinc-50 dark:hover:bg-zinc-800 text-xs font-semibold shadow-xs transition-all flex items-center justify-center gap-2.5 cursor-pointer active:scale-[0.99]"
+                onClick={handleGoogleAuth}
+                disabled={oauthLoading || loading}
+                className="w-full h-11 rounded-xl bg-white dark:bg-zinc-900 border border-zinc-300 dark:border-white/15 text-zinc-800 dark:text-zinc-200 hover:bg-zinc-50 dark:hover:bg-zinc-800 text-xs font-semibold shadow-xs transition-all flex items-center justify-center gap-2.5 cursor-pointer active:scale-[0.99] disabled:opacity-60 disabled:cursor-not-allowed"
               >
-                <svg className="w-4 h-4" viewBox="0 0 24 24">
-                  <path
-                    fill="#4285F4"
-                    d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.82-2.4 3.68v3.05h3.88c2.27-2.09 3.66-5.17 3.66-9.17z"
-                  />
-                  <path
-                    fill="#34A853"
-                    d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.88-3.05c-1.08.72-2.45 1.16-4.05 1.16-3.12 0-5.77-2.11-6.72-4.95H1.2v3.14C3.18 21.36 7.23 24 12 24z"
-                  />
-                  <path
-                    fill="#FBBC05"
-                    d="M5.28 14.25c-.25-.72-.38-1.49-.38-2.25s.13-1.53.38-2.25V6.61H1.2C.43 8.16 0 9.92 0 12s.43 3.84 1.2 5.39l4.08-3.14z"
-                  />
-                  <path
-                    fill="#EA4335"
-                    d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.23 0 3.18 2.64 1.2 6.61l4.08 3.14c.95-2.84 3.6-4.95 6.72-4.95z"
-                  />
-                </svg>
-                <span>Continue with Google</span>
+                {oauthLoading ? (
+                  <>
+                    <RefreshCw className="w-4 h-4 animate-spin text-zinc-500" />
+                    <span>Connecting to Google...</span>
+                  </>
+                ) : (
+                  <>
+                    <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24">
+                      <path
+                        fill="#4285F4"
+                        d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.82-2.4 3.68v3.05h3.88c2.27-2.09 3.66-5.17 3.66-9.17z"
+                      />
+                      <path
+                        fill="#34A853"
+                        d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.88-3.05c-1.08.72-2.45 1.16-4.05 1.16-3.12 0-5.77-2.11-6.72-4.95H1.2v3.14C3.18 21.36 7.23 24 12 24z"
+                      />
+                      <path
+                        fill="#FBBC05"
+                        d="M5.28 14.25c-.25-.72-.38-1.49-.38-2.25s.13-1.53.38-2.25V6.61H1.2C.43 8.16 0 9.92 0 12s.43 3.84 1.2 5.39l4.08-3.14z"
+                      />
+                      <path
+                        fill="#EA4335"
+                        d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.23 0 3.18 2.64 1.2 6.61l4.08 3.14c.95-2.84 3.6-4.95 6.72-4.95z"
+                      />
+                    </svg>
+                    <span>Continue with Google</span>
+                  </>
+                )}
               </button>
             </div>
           )}

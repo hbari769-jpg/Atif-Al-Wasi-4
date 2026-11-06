@@ -95,54 +95,9 @@ export const ImageGenerationModal: React.FC<ImageGenerationModalProps> = ({
 
   if (!isOpen) return null;
 
-  const handleGenerate = async (customPrompt?: string) => {
-    if (!user) {
-      setError('Please log in to generate photos.');
-      if (showToast) showToast('Please log in to generate photos', 'info');
-      if (onOpenAuth) onOpenAuth('login');
-      return;
-    }
-
-    const textPrompt = (customPrompt || prompt).trim();
-    if (!textPrompt) {
-      setError('Please enter a description for the image you want to generate.');
-      return;
-    }
-
-    setError(null);
-    setIsGenerating(true);
-    setSentToChat(false);
-    playUiSound('send');
-
-    try {
-      const res = await authFetch('/api/images/generate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          prompt: textPrompt,
-          aspectRatio: selectedRatio,
-          style: selectedStyle,
-          conversationId,
-        }),
-      });
-
-      const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data.error || 'Failed to generate image.');
-      }
-
-      const displayUrl = data.image.dataUrl || data.image.url;
-      setGeneratedImage({
-        url: displayUrl,
-        downloadUrl: data.image.url,
-        prompt: data.image.prompt || textPrompt,
-      });
-      playUiSound('complete');
-    } catch (err: any) {
-      setError(err.message || 'Image generation encountered an error.');
-    } finally {
-      setIsGenerating(false);
-    }
+  const handleGenerate = async (_customPrompt?: string) => {
+    setError('photo generation is currently turned off, try again later');
+    if (showToast) showToast('photo generation is currently turned off, try again later', 'info');
   };
 
   const handleCopyPrompt = () => {

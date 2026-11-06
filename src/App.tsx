@@ -23,6 +23,9 @@ import { TermsBanner } from './components/TermsBanner';
 import { TermsPage } from './components/TermsPage';
 import { PrivacyPolicyPage } from './components/PrivacyPolicyPage';
 import { TermsOfServicePage } from './components/TermsOfServicePage';
+import { AboutAestificPage } from './components/AboutAestificPage';
+import { FounderProfilePage } from './components/FounderProfilePage';
+import { SignupPage } from './components/SignupPage';
 import { SecretVerifyPage } from './components/SecretVerifyPage';
 import { SupportCenterPage } from './components/SupportCenterPage';
 import { WhatsNewBlankPage } from './components/WhatsNewBlankPage';
@@ -109,15 +112,26 @@ function MainApp() {
   const [showGuestLimitModal, setShowGuestLimitModal] = useState<boolean>(false);
   const guestMessagesRef = useRef<Record<string, Message[]>>({});
 
-  // App Navigation & Views - Restore last visited view or default to chat if guest started, else landing
+  // App Navigation & Views - Show landing first on initial visit, respect routes & persist active sessions
   const [activeView, setActiveView] = useState<ActiveView>(() => {
     const path = window.location.pathname;
     if (path === '/privacy') return 'privacy';
     if (path === '/terms') return 'terms';
-    const savedView = localStorage.getItem('aestific_active_view') as ActiveView;
+    if (path === '/about') return 'about';
+    if (path === '/founder') return 'founder';
+    if (path === '/signup') return 'signup';
+
     const isGuestActive = localStorage.getItem('aestific_guest_started') === 'true';
-    if (savedView && savedView !== 'landing') return savedView;
-    if (isGuestActive) return 'chat';
+    const hasToken = Boolean(localStorage.getItem('aestific_token') || sessionStorage.getItem('aestific_token'));
+    const savedView = localStorage.getItem('aestific_active_view') as ActiveView;
+
+    // If user has an active session (guest started or logged-in token), maintain their view
+    if (isGuestActive || hasToken) {
+      if (savedView && savedView !== 'landing') return savedView;
+      return 'chat';
+    }
+
+    // First time entering the site: always show first interface (landing)
     return 'landing';
   });
 
@@ -128,9 +142,21 @@ function MainApp() {
         setActiveView('privacy');
       } else if (path === '/terms') {
         setActiveView('terms');
+      } else if (path === '/about') {
+        setActiveView('about');
+      } else if (path === '/founder') {
+        setActiveView('founder');
+      } else if (path === '/signup') {
+        setActiveView('signup');
       } else if (path === '/') {
         const isGuestActive = localStorage.getItem('aestific_guest_started') === 'true';
-        setActiveView(isGuestActive ? 'chat' : 'landing');
+        const hasToken = Boolean(localStorage.getItem('aestific_token') || sessionStorage.getItem('aestific_token'));
+        const savedView = localStorage.getItem('aestific_active_view') as ActiveView;
+        if (isGuestActive || hasToken) {
+          setActiveView(savedView && savedView !== 'landing' ? savedView : 'chat');
+        } else {
+          setActiveView('landing');
+        }
       }
     };
     window.addEventListener('popstate', handlePopState);
@@ -145,6 +171,22 @@ function MainApp() {
     } else if (activeView === 'terms') {
       if (window.location.pathname !== '/terms') {
         window.history.pushState({ view: 'terms' }, '', '/terms');
+      }
+    } else if (activeView === 'about') {
+      if (window.location.pathname !== '/about') {
+        window.history.pushState({ view: 'about' }, '', '/about');
+      }
+    } else if (activeView === 'founder') {
+      if (window.location.pathname !== '/founder') {
+        window.history.pushState({ view: 'founder' }, '', '/founder');
+      }
+    } else if (activeView === 'signup') {
+      if (window.location.pathname !== '/signup') {
+        window.history.pushState({ view: 'signup' }, '', '/signup');
+      }
+    } else if (activeView === 'landing' || activeView === 'chat') {
+      if (window.location.pathname !== '/') {
+        window.history.pushState({}, '', '/');
       }
     }
   }, [activeView]);
@@ -1027,6 +1069,124 @@ function MainApp() {
     }
   };
 
+  // Dedicated Google OAuth post-authentication processor
+  const isProcessingOAuthRef = useRef(false);
+
+  const handleOAuthLoginSuccess = async (oauthData: { token?: string; user?: any }) => {
+    if (isProcessingOAuthRef.current) return;
+    isProcessingOAuthRef.current = true;
+
+    try {
+      if (oauthData.token) {
+        setAuthToken(oauthData.token);
+      }
+
+      // Check /api/auth/me to verify cookies & session state on backend
+      let targetUser = oauthData.user;
+      try {
+        const meRes = await authFetch('/api/auth/me');
+        if (meRes.ok) {
+          const meData = await meRes.json();
+          if (meData.user) {
+            targetUser = meData.user;
+          }
+          if (meData.token) {
+            setAuthToken(meData.token);
+          }
+        }
+      } catch (meErr) {
+        console.warn('Post-OAuth /api/auth/me check note:', meErr);
+      }
+
+      if (!targetUser) {
+        throw new Error('User profile not found after Google authentication.');
+      }
+
+      const currentView = 'chat'; // Transition directly to the chat interface
+      const currentGuestMessages = [...messages];
+
+      setUser(targetUser);
+      setGuestStarted(false);
+      try {
+        localStorage.removeItem('aestific_guest_started');
+        localStorage.removeItem('aestific_guest_message_count');
+        localStorage.setItem('aestific_active_view', 'chat');
+      } catch {}
+
+      setShowAuthModal(false);
+      setShowSplash(true);
+      showToast(
+        targetUser.name
+          ? `Welcome to Aestific, ${targetUser.name}!`
+          : 'Signed in with Google. Welcome to Aestific!',
+        'success'
+      );
+
+      let migrationResult: { conversation: Conversation; messages: Message[] } | null = null;
+      if (currentGuestMessages.length > 0) {
+        migrationResult = await migrateGuestSessionToUser(targetUser, currentGuestMessages);
+      }
+
+      await loadInitialData(targetUser);
+
+      if (migrationResult) {
+        setConversations((prev) => [
+          migrationResult!.conversation,
+          ...prev.filter((c) => c.id !== migrationResult!.conversation.id),
+        ]);
+        activeConversationIdRef.current = migrationResult.conversation.id;
+        setActiveConversationId(migrationResult.conversation.id);
+        setMessages(migrationResult.messages);
+      }
+
+      setActiveView(currentView);
+
+      if (pendingLandingPrompt) {
+        const p = pendingLandingPrompt;
+        setPendingLandingPrompt(null);
+        setTimeout(() => {
+          handleSendMessage(p, []);
+        }, 500);
+      }
+    } catch (err: any) {
+      console.error('OAuth post-auth error:', err);
+      showToast(err.message || 'Google authentication failed. Please try again.', 'error');
+    } finally {
+      setTimeout(() => {
+        isProcessingOAuthRef.current = false;
+      }, 1500);
+    }
+  };
+
+  useEffect(() => {
+    const handleWindowMessage = (event: MessageEvent) => {
+      // Secure origin validation
+      const origin = event.origin;
+      const isAllowedOrigin =
+        !origin ||
+        origin === window.location.origin ||
+        origin === 'https://aestific.com' ||
+        origin === 'https://www.aestific.com' ||
+        origin.endsWith('.run.app') ||
+        origin.includes('localhost') ||
+        origin.includes('127.0.0.1');
+
+      if (!isAllowedOrigin) {
+        return;
+      }
+
+      if (event.data?.type === 'OAUTH_AUTH_SUCCESS') {
+        handleOAuthLoginSuccess(event.data);
+      } else if (event.data?.type === 'OAUTH_AUTH_ERROR') {
+        const msg = event.data?.error || 'Google sign-in was canceled or failed.';
+        showToast(msg, 'error');
+      }
+    };
+
+    window.addEventListener('message', handleWindowMessage);
+    return () => window.removeEventListener('message', handleWindowMessage);
+  }, [messages, pendingLandingPrompt]);
+
   const handleLogout = async () => {
     try {
       await authFetch('/api/auth/logout', { method: 'POST' });
@@ -1446,14 +1606,24 @@ function MainApp() {
                   );
                 });
               } else if (event === 'token') {
-                if (!clientFirstTokenRecorded) {
+                const isFirst = !clientFirstTokenRecorded;
+                if (isFirst) {
                   clientFirstTokenRecorded = true;
                   const clientTtft = Date.now() - clientSendTime;
                   console.debug(`[Chat Timing Client] TTFT: ${clientTtft}ms (reqId: ${clientReqId})`);
                 }
                 accumulatedText += parsed.token || '';
                 if (streamingResponses) {
-                  if (!tokenRafPending) {
+                  // For the very first token, update state immediately for zero perceived latency
+                  if (isFirst) {
+                    setMessages((prev) =>
+                      prev.map((m) =>
+                        m.id === tempAssistantId || m.clientKey === tempAssistantId
+                          ? { ...m, content: accumulatedText, isStreaming: true }
+                          : m
+                      )
+                    );
+                  } else if (!tokenRafPending) {
                     tokenRafPending = true;
                     requestAnimationFrame(() => {
                       tokenRafPending = false;
@@ -2027,6 +2197,16 @@ function MainApp() {
     <div className="relative w-full h-[100dvh] overflow-hidden bg-white dark:bg-black">
       {showInitialWhiteLoading ? (
         <InitialWhiteLoadingScreen />
+      ) : activeView === 'signup' ? (
+        <SignupPage
+          onRegister={handleRegister}
+          onLogin={handleLogin}
+          onBackToHome={() => {
+            setActiveView('landing');
+            window.history.pushState({}, '', '/');
+          }}
+          onOpenLogin={() => handleOpenAuth('login')}
+        />
       ) : activeView === 'landing' ? (
         <StaticLandingPage
           user={user}
@@ -2183,12 +2363,20 @@ function MainApp() {
             {activeView === 'terms' && (
               <TermsOfServicePage
                 onBack={() => {
-                  setActiveView('chat');
+                  setActiveView('landing');
                   window.history.pushState({}, '', '/');
                 }}
                 onOpenPrivacy={() => {
                   setActiveView('privacy');
                   window.history.pushState({ view: 'privacy' }, '', '/privacy');
+                }}
+                onNavigate={(path) => {
+                  if (path === '/about') setActiveView('about');
+                  else if (path === '/founder') setActiveView('founder');
+                  else if (path === '/signup') setActiveView('signup');
+                  else if (path === '/privacy') setActiveView('privacy');
+                  else if (path === '/terms') setActiveView('terms');
+                  else setActiveView('landing');
                 }}
               />
             )}
@@ -2196,8 +2384,50 @@ function MainApp() {
             {activeView === 'privacy' && (
               <PrivacyPolicyPage
                 onBack={() => {
-                  setActiveView('chat');
+                  setActiveView('landing');
                   window.history.pushState({}, '', '/');
+                }}
+                onNavigate={(path) => {
+                  if (path === '/about') setActiveView('about');
+                  else if (path === '/founder') setActiveView('founder');
+                  else if (path === '/signup') setActiveView('signup');
+                  else if (path === '/privacy') setActiveView('privacy');
+                  else if (path === '/terms') setActiveView('terms');
+                  else setActiveView('landing');
+                }}
+              />
+            )}
+
+            {activeView === 'about' && (
+              <AboutAestificPage
+                onBack={() => {
+                  setActiveView('landing');
+                  window.history.pushState({}, '', '/');
+                }}
+                onNavigate={(path) => {
+                  if (path === '/about') setActiveView('about');
+                  else if (path === '/founder') setActiveView('founder');
+                  else if (path === '/signup') setActiveView('signup');
+                  else if (path === '/privacy') setActiveView('privacy');
+                  else if (path === '/terms') setActiveView('terms');
+                  else setActiveView('landing');
+                }}
+              />
+            )}
+
+            {activeView === 'founder' && (
+              <FounderProfilePage
+                onClose={() => {
+                  setActiveView('landing');
+                  window.history.pushState({}, '', '/');
+                }}
+                onNavigate={(path) => {
+                  if (path === '/about') setActiveView('about');
+                  else if (path === '/founder') setActiveView('founder');
+                  else if (path === '/signup') setActiveView('signup');
+                  else if (path === '/privacy') setActiveView('privacy');
+                  else if (path === '/terms') setActiveView('terms');
+                  else setActiveView('landing');
                 }}
               />
             )}

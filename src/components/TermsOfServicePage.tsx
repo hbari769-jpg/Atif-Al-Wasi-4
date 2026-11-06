@@ -1,13 +1,28 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { ArrowLeft, FileText, Sparkles, Shield, CheckCircle2 } from 'lucide-react';
 import { AestificArchIcon } from './AestificLogo';
+import { updatePageSEO } from '../lib/seo';
 
 interface TermsOfServicePageProps {
   onBack: () => void;
   onOpenPrivacy?: () => void;
+  onNavigate?: (path: string) => void;
 }
 
-export const TermsOfServicePage: React.FC<TermsOfServicePageProps> = ({ onBack, onOpenPrivacy }) => {
+export const TermsOfServicePage: React.FC<TermsOfServicePageProps> = ({ onBack, onOpenPrivacy, onNavigate }) => {
+  useEffect(() => {
+    updatePageSEO('terms');
+  }, []);
+
+  const handleLinkClick = (e: React.MouseEvent<HTMLAnchorElement>, path: string) => {
+    e.preventDefault();
+    if (onNavigate) {
+      onNavigate(path);
+    } else {
+      window.history.pushState({}, '', path);
+      window.dispatchEvent(new PopStateEvent('popstate'));
+    }
+  };
   return (
     <div className="fixed inset-0 z-50 flex flex-col w-screen h-screen bg-white dark:bg-black text-zinc-900 dark:text-zinc-100 overflow-hidden font-sans">
       {/* Top Header Bar */}
@@ -306,6 +321,48 @@ export const TermsOfServicePage: React.FC<TermsOfServicePageProps> = ({ onBack, 
                 These Terms of Service reflect Aestific AI&apos;s actual platform capabilities (free-to-use access, guest mode, auth, and AI model routing). They are provided for developer review and legal alignment prior to formal publication.
               </p>
             </div>
+
+            {/* Internal Navigation Footer */}
+            <footer className="mt-12 pt-6 border-t border-zinc-200 dark:border-white/10 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-zinc-500">
+              <div className="flex flex-wrap items-center gap-4">
+                <a
+                  href="/"
+                  onClick={(e) => handleLinkClick(e, '/')}
+                  className="hover:text-zinc-900 dark:hover:text-white transition-colors underline-offset-4 hover:underline"
+                >
+                  Aestific AI Home
+                </a>
+                <a
+                  href="/about"
+                  onClick={(e) => handleLinkClick(e, '/about')}
+                  className="hover:text-zinc-900 dark:hover:text-white transition-colors underline-offset-4 hover:underline"
+                >
+                  About Aestific
+                </a>
+                <a
+                  href="/founder"
+                  onClick={(e) => handleLinkClick(e, '/founder')}
+                  className="hover:text-zinc-900 dark:hover:text-white transition-colors underline-offset-4 hover:underline"
+                >
+                  Meet the Founder
+                </a>
+                <a
+                  href="/signup"
+                  onClick={(e) => handleLinkClick(e, '/signup')}
+                  className="hover:text-zinc-900 dark:hover:text-white transition-colors underline-offset-4 hover:underline"
+                >
+                  Sign Up
+                </a>
+                <a
+                  href="/privacy"
+                  onClick={(e) => handleLinkClick(e, '/privacy')}
+                  className="hover:text-zinc-900 dark:hover:text-white transition-colors underline-offset-4 hover:underline"
+                >
+                  Privacy Policy
+                </a>
+              </div>
+              <p>© {new Date().getFullYear()} Aestific. All rights reserved.</p>
+            </footer>
 
           </article>
         </div>

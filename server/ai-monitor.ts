@@ -35,6 +35,13 @@ export interface AiRequestLog {
   aspectRatio?: string;
   style?: string;
   durationMs?: number;
+  ttftMs?: number;
+  generationMs?: number;
+  routingMs?: number;
+  inputTokens?: number;
+  outputTokens?: number;
+  retryCount?: number;
+  fallbackCount?: number;
   status: 'success' | 'error';
   errorMessage?: string;
   ip?: string;
@@ -363,6 +370,13 @@ class AiMonitorService {
     aspectRatio?: string;
     style?: string;
     durationMs?: number;
+    ttftMs?: number;
+    generationMs?: number;
+    routingMs?: number;
+    inputTokens?: number;
+    outputTokens?: number;
+    retryCount?: number;
+    fallbackCount?: number;
     status?: 'success' | 'error';
     errorMessage?: string;
     ip?: string;
@@ -386,6 +400,13 @@ class AiMonitorService {
       aspectRatio: event.aspectRatio,
       style: event.style,
       durationMs: event.durationMs,
+      ttftMs: event.ttftMs,
+      generationMs: event.generationMs,
+      routingMs: event.routingMs,
+      inputTokens: event.inputTokens,
+      outputTokens: event.outputTokens,
+      retryCount: event.retryCount,
+      fallbackCount: event.fallbackCount,
       status: event.status || 'success',
       errorMessage: event.errorMessage,
       ip: event.ip,

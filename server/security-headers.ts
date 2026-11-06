@@ -133,7 +133,7 @@ export function getCspDirectives(isDev: boolean): string {
     "object-src 'none'",
     "base-uri 'self'",
     "form-action 'self'",
-    "frame-ancestors 'self' https://ai.studio https://*.google.com https://*.googleusercontent.com https://*.run.app",
+    "frame-ancestors 'self' https://ai.studio https://*.ai.studio https://*.google.com https://*.googleusercontent.com https://*.run.app",
   ];
 
   return directives.join('; ');
@@ -188,8 +188,9 @@ export function securityHeadersMiddleware(req: Request, res: Response, next: Nex
   // 1. MIME Sniffing Protection (Requirement 3)
   res.setHeader('X-Content-Type-Options', 'nosniff');
 
-  // 2. Clickjacking / Framing Protection
-  res.setHeader('X-Frame-Options', 'SAMEORIGIN');
+  // 2. Clickjacking / Framing Protection is governed by Content-Security-Policy frame-ancestors
+  // Note: We avoid X-Frame-Options: SAMEORIGIN to permit trusted embedding in Google AI Studio
+  // (https://ai.studio, https://*.google.com, https://*.run.app) as specified by CSP frame-ancestors.
 
   // 3. Referrer Policy
   res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');

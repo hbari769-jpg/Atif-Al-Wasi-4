@@ -24,10 +24,10 @@ import {
 } from 'lucide-react';
 import { AestificArchIcon } from './AestificLogo';
 import { AestificEnhanceLogo } from './AestificEnhanceLogo';
-import { DotHandArtwork } from './DotHandArtwork';
 import { DocumentsView, DocTab, DOC_ITEMS } from './DocumentsView';
 import { WhatsNewBlankPage } from './WhatsNewBlankPage';
 import { FounderProfilePage } from './FounderProfilePage';
+import { updatePageSEO } from '../lib/seo';
 
 interface StaticLandingPageProps {
   user: any;
@@ -76,6 +76,20 @@ export const StaticLandingPage: React.FC<StaticLandingPageProps> = ({
     "Your Ideas, Amplified.",
   ];
   const [headlineIndex, setHeadlineIndex] = useState(0);
+
+  useEffect(() => {
+    const path = typeof window !== 'undefined' ? window.location.pathname : '';
+    const hash = typeof window !== 'undefined' ? window.location.hash : '';
+    if (path === '/enhance' || hash === '#section-enhance') {
+      updatePageSEO('enhance');
+      setTimeout(() => scrollToSection('section-enhance'), 100);
+    } else if (path === '/focus' || hash === '#section-focus') {
+      updatePageSEO('focus');
+      setTimeout(() => scrollToSection('section-focus'), 100);
+    } else {
+      updatePageSEO('home');
+    }
+  }, []);
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -183,8 +197,8 @@ export const StaticLandingPage: React.FC<StaticLandingPageProps> = ({
       id: 'discover',
       label: 'discover',
       links: [
-        { label: 'what is aestific?', action: () => openDoc('about') },
-        { label: 'founder story', targetId: 'section-founder' },
+        { label: 'about aestific', href: '/about', action: () => onSelectView?.('about') },
+        { label: 'meet the founder', href: '/founder', action: () => onSelectView?.('founder') },
         { label: "what's new", action: () => onSelectView?.('whatsNew') },
       ],
     },
@@ -249,7 +263,7 @@ export const StaticLandingPage: React.FC<StaticLandingPageProps> = ({
         {/* Brand Logo & Wordmark */}
         <div
           onClick={() => scrollToSection('scene-hero')}
-          className="flex items-center gap-2.5 cursor-pointer select-none group"
+          className="flex items-center gap-2 sm:gap-2.5 cursor-pointer select-none group"
         >
           <img
             src="/aestific-icon-dark.png"
@@ -291,28 +305,48 @@ export const StaticLandingPage: React.FC<StaticLandingPageProps> = ({
                     className="absolute top-full left-1/2 -translate-x-1/2 pt-2 z-50"
                   >
                     <div className="bg-white border border-zinc-200/90 rounded-2xl shadow-2xl w-64 p-2 overflow-hidden">
-                      {item.links.map((link) => (
-                        <button
-                          key={link.label}
-                          type="button"
-                          onClick={() => {
-                            if (link.action) {
-                              link.action();
-                            } else if (link.targetId) {
-                              scrollToSection(link.targetId);
-                            }
-                            setOpenDropdown(null);
-                          }}
-                          className={`w-full text-left px-4 py-2.5 rounded-xl text-xs sm:text-sm text-zinc-700 hover:text-black hover:bg-zinc-100/80 lowercase transition-colors flex items-center justify-between ${
-                            link.action || link.targetId ? 'cursor-pointer' : 'cursor-default'
-                          }`}
-                        >
-                          <span>{link.label}</span>
-                          {link.action && (
-                            <span className="text-[10px] text-zinc-400 font-sans uppercase tracking-wider">view</span>
-                          )}
-                        </button>
-                      ))}
+                      {item.links.map((link: any) => {
+                        const linkClass = `w-full text-left px-4 py-2.5 rounded-xl text-xs sm:text-sm text-zinc-700 hover:text-black hover:bg-zinc-100/80 lowercase transition-colors flex items-center justify-between ${
+                          link.action || link.targetId || link.href ? 'cursor-pointer' : 'cursor-default'
+                        }`;
+                        if (link.href) {
+                          return (
+                            <a
+                              key={link.label}
+                              href={link.href}
+                              onClick={(e) => {
+                                e.preventDefault();
+                                link.action?.();
+                                setOpenDropdown(null);
+                              }}
+                              className={linkClass}
+                            >
+                              <span>{link.label}</span>
+                              <span className="text-[10px] text-zinc-400 font-sans uppercase tracking-wider">view</span>
+                            </a>
+                          );
+                        }
+                        return (
+                          <button
+                            key={link.label}
+                            type="button"
+                            onClick={() => {
+                              if (link.action) {
+                                link.action();
+                              } else if (link.targetId) {
+                                scrollToSection(link.targetId);
+                              }
+                              setOpenDropdown(null);
+                            }}
+                            className={linkClass}
+                          >
+                            <span>{link.label}</span>
+                            {link.action && (
+                              <span className="text-[10px] text-zinc-400 font-sans uppercase tracking-wider">view</span>
+                            )}
+                          </button>
+                        );
+                      })}
                     </div>
                   </motion.div>
                 )}
@@ -384,28 +418,57 @@ export const StaticLandingPage: React.FC<StaticLandingPageProps> = ({
                     {item.label}
                   </div>
                   <div className="grid grid-cols-1 gap-2 pl-2">
-                    {item.links.map((link) => (
-                      <button
-                        key={link.label}
-                        type="button"
-                        onClick={() => {
-                          if (link.action) {
-                            link.action();
-                          } else if (link.targetId) {
-                            scrollToSection(link.targetId);
-                          }
-                          setIsMobileMenuOpen(false);
-                        }}
-                        className="text-left text-sm font-medium text-zinc-800 hover:text-black py-1.5 lowercase"
-                      >
-                        {link.label}
-                      </button>
-                    ))}
+                    {item.links.map((link: any) => {
+                      if (link.href) {
+                        return (
+                          <a
+                            key={link.label}
+                            href={link.href}
+                            onClick={(e) => {
+                              e.preventDefault();
+                              link.action?.();
+                              setIsMobileMenuOpen(false);
+                            }}
+                            className="text-left text-sm font-medium text-zinc-800 hover:text-black py-1.5 lowercase block"
+                          >
+                            {link.label}
+                          </a>
+                        );
+                      }
+                      return (
+                        <button
+                          key={link.label}
+                          type="button"
+                          onClick={() => {
+                            if (link.action) {
+                              link.action();
+                            } else if (link.targetId) {
+                              scrollToSection(link.targetId);
+                            }
+                            setIsMobileMenuOpen(false);
+                          }}
+                          className="text-left text-sm font-medium text-zinc-800 hover:text-black py-1.5 lowercase"
+                        >
+                          {link.label}
+                        </button>
+                      );
+                    })}
                   </div>
                 </div>
               ))}
 
               <div className="pt-4 border-t border-zinc-100 flex flex-col gap-3">
+                <a
+                  href="/signup"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    setIsMobileMenuOpen(false);
+                    onOpenAuth('register');
+                  }}
+                  className="w-full py-2.5 rounded-xl text-center text-xs text-white bg-black font-medium lowercase block"
+                >
+                  create account / sign up
+                </a>
                 <button
                   type="button"
                   onClick={() => {
@@ -429,9 +492,6 @@ export const StaticLandingPage: React.FC<StaticLandingPageProps> = ({
         id="scene-hero"
         className="relative min-h-[90dvh] w-full flex flex-col justify-between pt-16 pb-10 px-6 sm:px-12 bg-white"
       >
-        {/* Subtle Signature Dotted Hand Silhouette Artwork */}
-        <DotHandArtwork />
-
         {/* Center Hero Headlines with Continuous Slide Carousel */}
         <div className="my-auto flex flex-col items-center justify-center text-center max-w-3xl mx-auto z-10 px-4">
           <div className="relative w-full h-[120px] sm:h-[150px] md:h-[190px] flex items-center justify-center overflow-hidden mb-4">
@@ -469,7 +529,7 @@ export const StaticLandingPage: React.FC<StaticLandingPageProps> = ({
               onClick={onGetStarted}
               className="px-7 sm:px-8 py-3 sm:py-3.5 rounded-full bg-black text-white text-sm sm:text-base font-medium hover:bg-zinc-800 transition-all active:scale-95 shadow-md cursor-pointer flex items-center gap-2"
             >
-              <span>open chat</span>
+              <span>open demo</span>
               <span className="text-zinc-400">↗</span>
             </button>
 
@@ -1124,7 +1184,7 @@ export const StaticLandingPage: React.FC<StaticLandingPageProps> = ({
               onClick={onGetStarted}
               className="px-9 py-4 rounded-full bg-black text-white text-sm sm:text-base font-medium hover:bg-zinc-800 transition-all active:scale-95 shadow-lg cursor-pointer flex items-center gap-2.5 mb-6"
             >
-              <span>open chat</span>
+              <span>open demo</span>
               <ArrowRight className="w-4 h-4" />
             </button>
 
@@ -1144,7 +1204,7 @@ export const StaticLandingPage: React.FC<StaticLandingPageProps> = ({
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-6 pb-12 border-b border-zinc-900">
             <div
               onClick={() => scrollToSection('scene-hero')}
-              className="flex items-center gap-3 cursor-pointer select-none group"
+              className="flex items-center gap-2.5 sm:gap-3 cursor-pointer select-none group"
             >
               <img
                 src="/aestific-icon-white.png"
@@ -1216,22 +1276,28 @@ export const StaticLandingPage: React.FC<StaticLandingPageProps> = ({
               </h3>
               <ul className="space-y-3.5 text-xs sm:text-sm">
                 <li>
-                  <button
-                    type="button"
-                    onClick={() => openDoc('about')}
-                    className="text-zinc-400 hover:text-white transition-colors lowercase cursor-pointer text-left"
+                  <a
+                    href="/about"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      onSelectView('about');
+                    }}
+                    className="text-zinc-400 hover:text-white transition-colors lowercase cursor-pointer text-left block"
                   >
-                    about aestific
-                  </button>
+                    About Aestific
+                  </a>
                 </li>
                 <li>
-                  <button
-                    type="button"
-                    onClick={() => setShowMeetFounder(true)}
-                    className="text-zinc-400 hover:text-white transition-colors lowercase cursor-pointer text-left"
+                  <a
+                    href="/founder"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      onSelectView('founder');
+                    }}
+                    className="text-zinc-400 hover:text-white transition-colors lowercase cursor-pointer text-left block"
                   >
-                    meet the founder
-                  </button>
+                    Meet the Founder
+                  </a>
                 </li>
                 <li>
                   <button
@@ -1243,13 +1309,16 @@ export const StaticLandingPage: React.FC<StaticLandingPageProps> = ({
                   </button>
                 </li>
                 <li>
-                  <button
-                    type="button"
-                    onClick={() => openDoc('about')}
-                    className="text-zinc-400 hover:text-white transition-colors lowercase cursor-pointer text-left"
+                  <a
+                    href="/about"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      onSelectView('about');
+                    }}
+                    className="text-zinc-400 hover:text-white transition-colors lowercase cursor-pointer text-left block"
                   >
                     documentation
-                  </button>
+                  </a>
                 </li>
               </ul>
             </div>
@@ -1260,6 +1329,18 @@ export const StaticLandingPage: React.FC<StaticLandingPageProps> = ({
                 resources
               </h3>
               <ul className="space-y-3.5 text-xs sm:text-sm">
+                <li>
+                  <a
+                    href="/signup"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      onOpenAuth('register');
+                    }}
+                    className="text-zinc-400 hover:text-white transition-colors lowercase cursor-pointer text-left block"
+                  >
+                    Sign Up
+                  </a>
+                </li>
                 <li>
                   <button
                     type="button"
@@ -1292,22 +1373,28 @@ export const StaticLandingPage: React.FC<StaticLandingPageProps> = ({
               </h3>
               <ul className="space-y-3.5 text-xs sm:text-sm">
                 <li>
-                  <button
-                    type="button"
-                    onClick={() => openDoc('privacy')}
-                    className="text-zinc-400 hover:text-white transition-colors lowercase cursor-pointer text-left"
+                  <a
+                    href="/privacy"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      onSelectView('privacy');
+                    }}
+                    className="text-zinc-400 hover:text-white transition-colors lowercase cursor-pointer text-left block"
                   >
-                    privacy policy
-                  </button>
+                    Privacy Policy
+                  </a>
                 </li>
                 <li>
-                  <button
-                    type="button"
-                    onClick={() => openDoc('terms')}
-                    className="text-zinc-400 hover:text-white transition-colors lowercase cursor-pointer text-left"
+                  <a
+                    href="/terms"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      onSelectView('terms');
+                    }}
+                    className="text-zinc-400 hover:text-white transition-colors lowercase cursor-pointer text-left block"
                   >
-                    terms of service
-                  </button>
+                    Terms of Service
+                  </a>
                 </li>
               </ul>
             </div>

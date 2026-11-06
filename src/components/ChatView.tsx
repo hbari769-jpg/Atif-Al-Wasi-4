@@ -196,6 +196,8 @@ interface ChatViewProps {
   onToggleMobileSidebar?: () => void;
   onOpenAuth?: (mode?: 'login' | 'register') => void;
   isAuthModalOpen?: boolean;
+  guestMessageCount?: number;
+  onOpenGuestLimitModal?: () => void;
 }
 
 /**

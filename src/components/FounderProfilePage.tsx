@@ -1,12 +1,27 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { ArrowLeft, X } from 'lucide-react';
 import { AestificArchIcon } from './AestificLogo';
+import { updatePageSEO } from '../lib/seo';
 
 interface FounderProfilePageProps {
   onClose: () => void;
+  onNavigate?: (path: string) => void;
 }
 
-export const FounderProfilePage: React.FC<FounderProfilePageProps> = ({ onClose }) => {
+export const FounderProfilePage: React.FC<FounderProfilePageProps> = ({ onClose, onNavigate }) => {
+  useEffect(() => {
+    updatePageSEO('founder');
+  }, []);
+
+  const handleLinkClick = (e: React.MouseEvent<HTMLAnchorElement>, path: string) => {
+    e.preventDefault();
+    if (onNavigate) {
+      onNavigate(path);
+    } else {
+      window.history.pushState({}, '', path);
+      window.dispatchEvent(new PopStateEvent('popstate'));
+    }
+  };
   return (
     <div className="fixed inset-0 z-50 bg-white text-zinc-950 flex flex-col overflow-hidden font-['Comfortaa'] selection:bg-zinc-800 selection:text-white">
       {/* Top Navigation Bar with Back/Exit controls and Official Branding */}
@@ -75,7 +90,7 @@ export const FounderProfilePage: React.FC<FounderProfilePageProps> = ({ onClose 
 
             {/* Title */}
             <h1 className="text-3xl sm:text-5xl font-medium text-black lowercase tracking-tight mb-2 leading-tight">
-              Atif Al Wasi
+              Meet the Founder — Atif Al Wasi
             </h1>
 
             {/* Role Subtitle */}
@@ -107,6 +122,48 @@ export const FounderProfilePage: React.FC<FounderProfilePageProps> = ({ onClose 
             <div className="mt-12 pt-8 border-t border-zinc-100 text-xs sm:text-sm text-zinc-400 font-light lowercase">
               Building Aestific AI · Bangladesh
             </div>
+
+            {/* Internal Navigation Links */}
+            <footer className="mt-12 pt-6 border-t border-zinc-100 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-zinc-400">
+              <div className="flex flex-wrap items-center gap-4">
+                <a
+                  href="/"
+                  onClick={(e) => handleLinkClick(e, '/')}
+                  className="hover:text-black transition-colors underline-offset-4 hover:underline"
+                >
+                  Aestific AI Home
+                </a>
+                <a
+                  href="/about"
+                  onClick={(e) => handleLinkClick(e, '/about')}
+                  className="hover:text-black transition-colors underline-offset-4 hover:underline"
+                >
+                  About Aestific
+                </a>
+                <a
+                  href="/signup"
+                  onClick={(e) => handleLinkClick(e, '/signup')}
+                  className="hover:text-black transition-colors underline-offset-4 hover:underline"
+                >
+                  Sign Up
+                </a>
+                <a
+                  href="/privacy"
+                  onClick={(e) => handleLinkClick(e, '/privacy')}
+                  className="hover:text-black transition-colors underline-offset-4 hover:underline"
+                >
+                  Privacy Policy
+                </a>
+                <a
+                  href="/terms"
+                  onClick={(e) => handleLinkClick(e, '/terms')}
+                  className="hover:text-black transition-colors underline-offset-4 hover:underline"
+                >
+                  Terms of Service
+                </a>
+              </div>
+              <p>© {new Date().getFullYear()} Aestific. All rights reserved.</p>
+            </footer>
           </div>
         </div>
       </main>
